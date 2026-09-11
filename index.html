@@ -58,12 +58,34 @@ const colors=['#d73027','#4575b4','#1a9850','#762a83','#f46d43'], layers=[], all
 let highlighted=null;
 let roadData=null;
 const status=document.getElementById('status'), q=document.getElementById('q'), results=document.getElementById('results');
-function popup(r,w){return '<b>'+r[1]+'</b><br>Wilayah: '+w+'<br>Panjang: '+Number(r[4]).toFixed(3)+' km<br>Jumlah tiang: '+r[6].toLocaleString('id-ID')+(r[2]?'<br>Ref: '+r[2]:'')+'<br>OSM highway: '+r[3];}
+function popup(r,w,index){return '<b>'+r[1]+'</b><br>Wilayah: '+w+'<br>Panjang: '+Number(r[4]).toFixed(3)+' km<br>Jumlah tiang: '+r[6].toLocaleString('id-ID')+(r[2]?'<br>Ref: '+r[2]:'')+'<br>OSM highway: '+r[3]+'<br><button style="margin-top:6px" onclick="window.__downloadKML('+index+')">Unduh KML ruas + tiang</button>';}
+function escapeXml(s){return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+window.__downloadKML=function(index){
+ const r=all[index]; if(!r)return;
+ const name=r[1]||'(tanpa nama)';
+ const coords=r[5].map(p=>p[0]+','+p[1]+',0').join(' ');
+ const polesOnRoad=roadData.tiang.filter(p=>p[3]===index);
+ let kml='<?xml version="1.0" encoding="UTF-8"?>\n<kml xmlns="http://www.opengis.net/kml/2.2"><Document>\n';
+ kml+='<name>'+escapeXml(name)+'</name>\n';
+ kml+='<Placemark><name>'+escapeXml(name)+'</name><description>Panjang: '+Number(r[4]).toFixed(3)+' km | Jumlah tiang: '+polesOnRoad.length+'</description>';
+ kml+='<Style><LineStyle><color>ff0000ff</color><width>4</width></LineStyle></Style>';
+ kml+='<LineString><tessellate>1</tessellate><coordinates>'+coords+'</coordinates></LineString></Placemark>\n';
+ polesOnRoad.forEach(p=>{
+  kml+='<Placemark><name>'+escapeXml(p[0])+'</name><description>Koordinat: '+p[1]+', '+p[2]+'</description><Point><coordinates>'+p[2]+','+p[1]+',0</coordinates></Point></Placemark>\n';
+ });
+ kml+='</Document></kml>';
+ const blob=new Blob([kml],{type:'application/vnd.google-earth.kml+xml'});
+ const url=URL.createObjectURL(blob);
+ const a=document.createElement('a');
+ a.href=url; a.download='ruas_'+name.replace(/[^a-z0-9]+/gi,'_')+'.kml';
+ document.body.appendChild(a); a.click(); a.remove();
+ URL.revokeObjectURL(url);
+};
 function selectRoad(index, openPopup=true){
  const r=all[index], line=lines[index]; if(!r||!line)return;
  if(highlighted)map.removeLayer(highlighted);
  highlighted=L.polyline(line.getLatLngs(),{color:'#ffd400',weight:9,opacity:.95}).addTo(map);
- highlighted.bindPopup(popup(r,roadData.wilayah[r[0]]));
+ highlighted.bindPopup(popup(r,roadData.wilayah[r[0]],index));
  map.fitBounds(line.getBounds(),{maxZoom:16,padding:[30,30]});
  if(openPopup)highlighted.openPopup();
 }
@@ -72,7 +94,7 @@ fetch('jalan_priangan_timur_ringan.json').then(r=>{if(!r.ok)throw Error('File da
  data.wilayah.forEach((w,i)=>layers[i]=L.layerGroup().addTo(map));
  const poleLayer=L.layerGroup();
  const poleRenderer=L.canvas({padding:.5});
- data.jalan.forEach(r=>{const index=all.push(r)-1;const line=L.polyline(r[5].map(p=>[p[1],p[0]]),{color:colors[r[0]],weight:3,opacity:.72});lines[index]=line;line.bindPopup(popup(r,data.wilayah[r[0]]));line.on('click',()=>selectRoad(index));line.addTo(layers[r[0]])});
+ data.jalan.forEach(r=>{const index=all.push(r)-1;const line=L.polyline(r[5].map(p=>[p[1],p[0]]),{color:colors[r[0]],weight:3,opacity:.72});lines[index]=line;line.bindPopup(popup(r,data.wilayah[r[0]],index));line.on('click',()=>selectRoad(index));line.addTo(layers[r[0]])});
  data.tiang.forEach(p=>L.circleMarker([p[1],p[2]],{radius:3,color:'#111',weight:1,fillColor:'#ff8c00',fillOpacity:.85,renderer:poleRenderer}).bindPopup('<b>Tiang</b><br>ID: '+p[0]+'<br>Koordinat: '+p[1]+', '+p[2]+'<br>Ruas: '+all[p[3]][1]).addTo(poleLayer));
  L.control.layers(null,Object.fromEntries(data.wilayah.map((w,i)=>[w,layers[i]]).concat([['Tiang ('+data.tiang.length.toLocaleString('id-ID')+')',poleLayer]]) )).addTo(map);
  status.textContent=all.length.toLocaleString('id-ID')+' ruas · '+data.tiang.length.toLocaleString('id-ID')+' tiang';
