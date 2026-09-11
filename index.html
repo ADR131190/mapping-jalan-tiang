@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Peta Jalan Priangan Timur</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+*{box-sizing:border-box}html,body,#map{height:100%;margin:0}#panel{position:absolute;z-index:1000;top:10px;left:10px;width:320px;max-width:calc(100% - 20px);padding:12px;background:#fff;border-radius:8px;box-shadow:0 1px 8px #5558;font:14px Arial}h3{margin:0 0 9px;font-size:17px}input,button,select{width:100%;padding:8px;margin:3px 0;border:1px solid #bbb;border-radius:4px}button{cursor:pointer;background:#1769aa;color:#fff;border:0}.hint{color:#555;font-size:12px}.status{margin-top:6px;color:#1769aa}.leaflet-popup-content{line-height:1.5}
+</style>
+</head>
+<body><div id="map"></div><section id="panel">
+<h3>Jalan Priangan Timur</h3>
+<input id="q" placeholder="Cari nama jalan..." autocomplete="off">
+<select id="results"><option value="">-- pilih hasil pencarian --</option></select>
+<input id="coord" placeholder="Koordinat: -7.327, 108.220">
+<button id="go">Cari titik koordinat</button>
+<div class="hint">Klik ruas untuk nama dan panjang. Data: OpenStreetMap.</div><div id="status" class="status">Memuat data...</div>
+</section>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+const map=L.map('map').setView([-7.25,107.95],10);
+L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
+const colors=['#d73027','#4575b4','#1a9850','#762a83','#f46d43'], layers=[], all=[], lines=[];
+let highlighted=null;
+let roadData=null;
+const status=document.getElementById('status'), q=document.getElementById('q'), results=document.getElementById('results');
+function popup(r,w){return '<b>'+r[1]+'</b><br>Wilayah: '+w+'<br>Panjang: '+Number(r[4]).toFixed(3)+' km<br>Jumlah tiang: '+r[6].toLocaleString('id-ID')+(r[2]?'<br>Ref: '+r[2]:'')+'<br>OSM highway: '+r[3];}
+function selectRoad(index, openPopup=true){
+ const r=all[index], line=lines[index]; if(!r||!line)return;
+ if(highlighted)map.removeLayer(highlighted);
+ highlighted=L.polyline(line.getLatLngs(),{color:'#ffd400',weight:9,opacity:.95}).addTo(map);
+ highlighted.bindPopup(popup(r,roadData.wilayah[r[0]]));
+ map.fitBounds(line.getBounds(),{maxZoom:16,padding:[30,30]});
+ if(openPopup)highlighted.openPopup();
+}
+fetch('jalan_priangan_timur_ringan.json').then(r=>{if(!r.ok)throw Error('File data tidak ditemukan');return r.json()}).then(data=>{
+ roadData=data;
+ data.wilayah.forEach((w,i)=>layers[i]=L.layerGroup().addTo(map));
+ const poleLayer=L.layerGroup();
+ const poleRenderer=L.canvas({padding:.5});
+ data.jalan.forEach(r=>{const index=all.push(r)-1;const line=L.polyline(r[5].map(p=>[p[1],p[0]]),{color:colors[r[0]],weight:3,opacity:.72});lines[index]=line;line.bindPopup(popup(r,data.wilayah[r[0]]));line.on('click',()=>selectRoad(index));line.addTo(layers[r[0]])});
+ data.tiang.forEach(p=>L.circleMarker([p[1],p[2]],{radius:3,color:'#111',weight:1,fillColor:'#ff8c00',fillOpacity:.85,renderer:poleRenderer}).bindPopup('<b>Tiang</b><br>ID: '+p[0]+'<br>Koordinat: '+p[1]+', '+p[2]+'<br>Ruas: '+all[p[3]][1]).addTo(poleLayer));
+ L.control.layers(null,Object.fromEntries(data.wilayah.map((w,i)=>[w,layers[i]]).concat([['Tiang ('+data.tiang.length.toLocaleString('id-ID')+')',poleLayer]]) )).addTo(map);
+ status.textContent=all.length.toLocaleString('id-ID')+' ruas · '+data.tiang.length.toLocaleString('id-ID')+' tiang';
+ q.oninput=()=>{const term=q.value.trim().toLowerCase();results.innerHTML='<option value="">-- pilih hasil pencarian --</option>';if(term.length<2)return;all.map((r,i)=>({r,i})).filter(x=>x.r[1].toLowerCase().includes(term)).slice(0,100).forEach(x=>{const o=document.createElement('option');o.value=x.i;o.textContent=x.r[1]+' — '+data.wilayah[x.r[0]];results.appendChild(o)})};
+ results.onchange=()=>{if(results.value!=='')selectRoad(Number(results.value))};
+ q.onkeydown=e=>{if(e.key==='Enter'&&results.options.length>1){results.selectedIndex=1;selectRoad(Number(results.value))}};
+ document.getElementById('go').onclick=()=>{const p=document.getElementById('coord').value.split(',').map(Number);if(p.length!==2||p.some(Number.isNaN)||p[0]<-90||p[0]>90||p[1]<-180||p[1]>180){alert('Format koordinat harus: latitude, longitude');return}L.marker(p).addTo(map).bindPopup('Koordinat: '+p[0]+', '+p[1]).openPopup();map.setView(p,16)};
+}).catch(e=>status.textContent='Gagal memuat: '+e.message);
+</script></body></html>
