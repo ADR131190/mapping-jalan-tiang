@@ -8,16 +8,44 @@
 *{box-sizing:border-box}html,body,#map{height:100%;margin:0}#panel{position:absolute;z-index:1000;top:10px;left:10px;width:320px;max-width:calc(100% - 20px);padding:12px;background:#fff;border-radius:8px;box-shadow:0 1px 8px #5558;font:14px Arial}h3{margin:0 0 9px;font-size:17px}input,button,select{width:100%;padding:8px;margin:3px 0;border:1px solid #bbb;border-radius:4px}button{cursor:pointer;background:#1769aa;color:#fff;border:0}.hint{color:#555;font-size:12px}.status{margin-top:6px;color:#1769aa}.leaflet-popup-content{line-height:1.5}
 </style>
 </head>
-<body><div id="map"></div><section id="panel">
+<body>
+<div id="login" style="position:fixed;inset:0;z-index:2000;background:#0e2a44;display:flex;align-items:center;justify-content:center;font-family:Arial">
+  <form id="loginForm" style="background:#fff;padding:28px;border-radius:10px;width:300px;max-width:90%;box-shadow:0 4px 20px #0006">
+    <h3 style="margin:0 0 14px">Masuk</h3>
+    <input id="loginUser" placeholder="Username" autocomplete="username" style="width:100%;padding:9px;margin:4px 0;border:1px solid #bbb;border-radius:4px">
+    <input id="loginPass" type="password" placeholder="Password" autocomplete="current-password" style="width:100%;padding:9px;margin:4px 0;border:1px solid #bbb;border-radius:4px">
+    <button type="submit" style="width:100%;padding:9px;margin-top:8px;background:#1769aa;color:#fff;border:0;border-radius:4px;cursor:pointer">Masuk</button>
+    <div id="loginError" style="color:#c0392b;font-size:13px;margin-top:8px;display:none">Username atau password salah.</div>
+  </form>
+</div>
+<div id="app" style="display:none"><div id="map"></div><section id="panel">
 <h3>Jalan Priangan Timur</h3>
 <input id="q" placeholder="Cari nama jalan..." autocomplete="off">
 <select id="results"><option value="">-- pilih hasil pencarian --</option></select>
 <input id="coord" placeholder="Koordinat: -7.327, 108.220">
 <button id="go">Cari titik koordinat</button>
 <div class="hint">Klik ruas untuk nama dan panjang. Data: OpenStreetMap.</div><div id="status" class="status">Memuat data...</div>
-</section>
+</section></div>
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script>
+(function(){
+  const CRED_HASH='26d5f2fdbb97ed6cec89daa3a420a528720456afeee55876870820e373909976';
+  async function sha256(text){
+    const buf=await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+    return Array.from(new Uint8Array(buf)).map(b=>b.toString(16).padStart(2,'0')).join('');
+  }
+  const SESSION_KEY='peta_priangan_auth';
+  function showApp(){document.getElementById('login').style.display='none';document.getElementById('app').style.display='block';initMap();}
+  if(sessionStorage.getItem(SESSION_KEY)===CRED_HASH){showApp();}
+  document.getElementById('loginForm').addEventListener('submit', async function(e){
+    e.preventDefault();
+    const u=document.getElementById('loginUser').value.trim();
+    const p=document.getElementById('loginPass').value;
+    const hash=await sha256(u.toLowerCase()+':'+p);
+    if(hash===CRED_HASH){sessionStorage.setItem(SESSION_KEY,hash);showApp();}
+    else{document.getElementById('loginError').style.display='block';}
+  });
+  window.initMap=function(){
 const map=L.map('map').setView([-7.25,107.95],10);
 L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
 const colors=['#d73027','#4575b4','#1a9850','#762a83','#f46d43'], layers=[], all=[], lines=[];
@@ -47,4 +75,6 @@ fetch('jalan_priangan_timur_ringan.json').then(r=>{if(!r.ok)throw Error('File da
  q.onkeydown=e=>{if(e.key==='Enter'&&results.options.length>1){results.selectedIndex=1;selectRoad(Number(results.value))}};
  document.getElementById('go').onclick=()=>{const p=document.getElementById('coord').value.split(',').map(Number);if(p.length!==2||p.some(Number.isNaN)||p[0]<-90||p[0]>90||p[1]<-180||p[1]>180){alert('Format koordinat harus: latitude, longitude');return}L.marker(p).addTo(map).bindPopup('Koordinat: '+p[0]+', '+p[1]).openPopup();map.setView(p,16)};
 }).catch(e=>status.textContent='Gagal memuat: '+e.message);
+  };
+})();
 </script></body></html>
